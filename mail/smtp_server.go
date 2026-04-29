@@ -73,6 +73,7 @@ func (s *smtpSession) Logout() error {
 func (s *smtpSession) Mail(from string, _ *smtp.MailOptions) error {
 	s.sender = strings.TrimSpace(from)
 	s.recipients = nil
+	log.Printf("[smtp] MAIL FROM=<%s>", s.sender)
 	return nil
 }
 
@@ -80,14 +81,18 @@ func (s *smtpSession) Rcpt(to string, _ *smtp.RcptOptions) error {
 	normalized, err := s.delivery.ValidateRecipient(context.Background(), to)
 	if err != nil {
 		if err == ErrInvalidRecipient {
+			log.Printf("[smtp] RCPT TO=<%s> rejected: invalid recipient address", strings.TrimSpace(to))
 			return &smtp.SMTPError{Code: 550, Message: "invalid recipient address"}
 		}
 		if err == ErrInactiveDomain {
+			log.Printf("[smtp] RCPT TO=<%s> rejected: recipient domain is not active", strings.TrimSpace(to))
 			return &smtp.SMTPError{Code: 550, Message: "recipient domain is not active"}
 		}
+		log.Printf("[smtp] RCPT TO=<%s> temporary failure: %v", strings.TrimSpace(to), err)
 		return &smtp.SMTPError{Code: 451, Message: "temporary validation failure"}
 	}
 	s.recipients = append(s.recipients, normalized)
+	log.Printf("[smtp] RCPT TO=<%s> accepted", normalized)
 	return nil
 }
 
@@ -105,18 +110,22 @@ func (s *smtpSession) Data(r io.Reader) error {
 	if parsed.Sender == "" {
 		parsed.Sender = s.sender
 	}
+	log.Printf("[smtp] DATA accepted from=<%s> recipients=%s bytes=%d subject=%q", parsed.Sender, strings.Join(s.recipients, ","), len(raw), parsed.Subject)
 
 	for _, recipient := range s.recipients {
-		if _, err := s.delivery.Deliver(context.Background(), DeliveryInput{
+		result, err := s.delivery.Deliver(context.Background(), DeliveryInput{
 			Recipient: recipient,
 			Sender:    parsed.Sender,
 			Subject:   parsed.Subject,
 			BodyText:  parsed.BodyText,
 			BodyHTML:  parsed.BodyHTML,
 			Raw:       parsed.Raw,
-		}); err != nil {
+		})
+		if err != nil {
+			log.Printf("[smtp] delivery failed recipient=<%s> from=<%s>: %v", recipient, parsed.Sender, err)
 			return &smtp.SMTPError{Code: 451, Message: fmt.Sprintf("delivery failed: %v", err)}
 		}
+		log.Printf("[smtp] message stored recipient=<%s> status=%s from=<%s> subject=%q", recipient, result.Status, parsed.Sender, parsed.Subject)
 	}
 	return nil
 }
