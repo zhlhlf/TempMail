@@ -56,14 +56,14 @@ type cfError struct {
 	Message string `json:"message"`
 }
 
-// ExtractBaseDomain strips the first DNS label from fqdn.
-// "sub.example.com" → "example.com". Errors if fewer than 2 labels.
+// ExtractBaseDomain strips the leftmost DNS label from fqdn.
+// "sub.example.com" → "example.com". Errors if fewer than 3 labels.
 func ExtractBaseDomain(fqdn string) (string, error) {
 	parts := strings.Split(fqdn, ".")
 	if len(parts) < 3 {
 		return "", fmt.Errorf("invalid domain: %s (need at least sub.example.com)", fqdn)
 	}
-	return strings.Join(parts[len(parts)-2:], "."), nil
+	return strings.Join(parts[1:], "."), nil
 }
 
 // FindZone 根据域名查找对应的 Cloudflare Zone。
