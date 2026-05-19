@@ -20,7 +20,9 @@ import (
 )
 
 type Store struct {
-	db *sql.DB
+	db              *sql.DB
+	adminCreated    bool
+	initialAdminKey string
 }
 
 var initSQL = `
@@ -147,6 +149,8 @@ func New(ctx context.Context, dbPath string) (*Store, error) {
 	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM accounts WHERE is_admin = 1`).Scan(&count); err != nil {
 		return nil, fmt.Errorf("check admin: %w", err)
 	}
+	adminCreated := false
+	initialAdminKey := ""
 	if count == 0 {
 		adminKey := "tm_admin_" + generateAPIKey()
 		adminID := uuid.New().String()
@@ -156,15 +160,25 @@ func New(ctx context.Context, dbPath string) (*Store, error) {
 		); err != nil {
 			return nil, fmt.Errorf("seed admin: %w", err)
 		}
+		adminCreated = true
+		initialAdminKey = adminKey
 	}
 
 	db.SetMaxOpenConns(1)
 
-	return &Store{db: db}, nil
+	return &Store{db: db, adminCreated: adminCreated, initialAdminKey: initialAdminKey}, nil
 }
 
 func (s *Store) Close() {
 	s.db.Close()
+}
+
+func (s *Store) InitialAdminCreated() bool {
+	return s.adminCreated
+}
+
+func (s *Store) InitialAdminKey() string {
+	return s.initialAdminKey
 }
 
 func (s *Store) GetAccountByAPIKey(ctx context.Context, apiKey string) (*model.Account, error) {

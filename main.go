@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"log"
 	"net/http"
-	"os"
 	"os/signal"
-	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -34,6 +34,7 @@ func main() {
 	log.Println("✓ Database connected")
 
 	seedSettings(ctx, db, cfg)
+	printInitialAdminKey(db)
 
 	domainH := handler.NewDomainHandler(db, cfg.SMTPServerIP)
 	router := buildRouter(db, domainH, cfg)
@@ -57,7 +58,6 @@ func main() {
 
 	go runMailboxCleaner(ctx, db)
 	go runMXVerifier(ctx, db, domainH)
-	go writeAdminKeyFile(ctx, db, cfg.AdminKeyFile)
 
 	httpErrCh := make(chan error, 1)
 	smtpErrCh := make(chan error, 1)
@@ -95,14 +95,60 @@ func main() {
 }
 
 func seedSettings(ctx context.Context, db *store.Store, cfg *config.Config) {
-	if cfg.SMTPServerIP == "" {
+	dbIP, _ := db.GetSetting(ctx, "smtp_server_ip")
+	if cfg.SMTPServerIP != "" {
+		if dbIP != cfg.SMTPServerIP {
+			if err := db.SetSetting(ctx, "smtp_server_ip", cfg.SMTPServerIP); err == nil {
+				log.Printf("✓ Synced SMTP_SERVER_IP from env to DB: %s", cfg.SMTPServerIP)
+			}
+		}
 		return
 	}
-	if dbIP, _ := db.GetSetting(ctx, "smtp_server_ip"); dbIP != cfg.SMTPServerIP {
-		if err := db.SetSetting(ctx, "smtp_server_ip", cfg.SMTPServerIP); err == nil {
-			log.Printf("✓ Synced SMTP_SERVER_IP from env to DB: %s", cfg.SMTPServerIP)
-		}
+	if dbIP != "" {
+		return
 	}
+	if publicIP, err := fetchPublicIP(ctx); err == nil && publicIP != "" {
+		if err := db.SetSetting(ctx, "smtp_server_ip", publicIP); err == nil {
+			log.Printf("✓ Initialized SMTP server public IP from ip.sb: %s", publicIP)
+		}
+	} else if err != nil {
+		log.Printf("[settings] could not fetch public IP from ip.sb: %v", err)
+	}
+}
+
+func fetchPublicIP(ctx context.Context) (string, error) {
+	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, "https://api.ip.sb/ip", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "TempMail/1.0")
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		return "", errors.New("ip.sb returned " + res.Status)
+	}
+	body, err := io.ReadAll(io.LimitReader(res.Body, 128))
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(body)), nil
+}
+
+func printInitialAdminKey(db *store.Store) {
+	if !db.InitialAdminCreated() {
+		return
+	}
+	log.Println("============================================================")
+	log.Println("首次初始化管理员账号，请保存以下 Admin API Key，后续启动不会重复生成：")
+	log.Printf("ADMIN_API_KEY=%s", db.InitialAdminKey())
+	log.Println("============================================================")
 }
 
 func buildRouter(db *store.Store, domainH *handler.DomainHandler, cfg *config.Config) *gin.Engine {

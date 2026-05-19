@@ -721,7 +721,8 @@ tr:hover td { background: rgba(184,92,56,0.04); }
   border: none;
   min-height: 400px;
   background: white;
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  display: block;
+  border-radius: 0;
 }
 .email-body-text {
   padding: 1.3rem;
