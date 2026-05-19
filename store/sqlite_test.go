@@ -2,9 +2,11 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func newTestStore(t *testing.T) (*Store, func()) {
@@ -216,5 +218,50 @@ func TestRetainedMailCRUD(t *testing.T) {
 	}
 	if len(list) != 0 {
 		t.Fatalf("len(list) after delete = %d, want 0", len(list))
+	}
+}
+
+func TestGetMailboxByFullAddressIgnoresExpired(t *testing.T) {
+	s, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	domain, err := s.AddDomain(ctx, "expire.example.com", "mail.expire.example.com")
+	if err != nil {
+		t.Fatalf("AddDomain: %v", err)
+	}
+	accounts, _, err := s.ListAccounts(ctx, 1, 10)
+	if err != nil {
+		t.Fatalf("ListAccounts: %v", err)
+	}
+	if len(accounts) == 0 {
+		t.Fatal("no account found")
+	}
+	accountID := accounts[0].ID
+
+	activeMailbox, err := s.CreateMailbox(ctx, accountID, "active", domain.ID, "active@expire.example.com", 30)
+	if err != nil {
+		t.Fatalf("CreateMailbox active: %v", err)
+	}
+	got, err := s.GetMailboxByFullAddress(ctx, activeMailbox.FullAddress)
+	if err != nil {
+		t.Fatalf("GetMailboxByFullAddress active: %v", err)
+	}
+	if got.FullAddress != activeMailbox.FullAddress {
+		t.Fatalf("full_address = %q, want %q", got.FullAddress, activeMailbox.FullAddress)
+	}
+
+	expiredMailbox, err := s.CreateMailbox(ctx, accountID, "expired", domain.ID, "expired@expire.example.com", 30)
+	if err != nil {
+		t.Fatalf("CreateMailbox expired: %v", err)
+	}
+	_, err = s.db.ExecContext(ctx, `UPDATE mailboxes SET expires_at = ? WHERE id = ?`, time.Now().UTC().Add(-time.Minute).Format(time.RFC3339), expiredMailbox.ID.String())
+	if err != nil {
+		t.Fatalf("expire mailbox: %v", err)
+	}
+
+	_, err = s.GetMailboxByFullAddress(ctx, expiredMailbox.FullAddress)
+	if err != sql.ErrNoRows {
+		t.Fatalf("GetMailboxByFullAddress expired error = %v, want sql.ErrNoRows", err)
 	}
 }

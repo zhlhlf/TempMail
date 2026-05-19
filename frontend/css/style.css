@@ -581,6 +581,53 @@ tr:hover td { background: rgba(184,92,56,0.04); }
 .mailbox-address { font-family: var(--font-mono); font-size: 0.82rem; color: var(--clr-primary); font-weight: 600; word-break: break-all; }
 .mailbox-stats { font-size: 0.76rem; color: var(--text-muted); margin-top: 0.4rem; }
 .mailbox-actions { display: flex; gap: 0.5rem; margin-top: 0.8rem; flex-wrap: wrap; }
+.mailbox-floating-pager {
+  position: fixed;
+  right: 1.4rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.45rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: 0 12px 36px var(--shadow);
+  backdrop-filter: var(--glass-blur);
+}
+.mailbox-page-arrow {
+  width: 42px;
+  height: 42px;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--clr-primary), var(--clr-accent));
+  color: #fff;
+  font-size: 1.75rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--transition), opacity var(--transition), box-shadow var(--transition);
+}
+.mailbox-page-arrow:hover:not(:disabled) {
+  transform: scale(1.08);
+  box-shadow: 0 8px 22px rgba(29, 155, 240, 0.28);
+}
+.mailbox-page-arrow:disabled {
+  cursor: not-allowed;
+  opacity: 0.34;
+  filter: grayscale(0.7);
+}
+.mailbox-page-info {
+  min-width: 42px;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
 
 /* domain guide */
 .guide-step {
@@ -904,6 +951,15 @@ tr:hover td { background: rgba(184,92,56,0.04); }
 
   /* 邮箱卡片 */
   .mailbox-grid { grid-template-columns: 1fr; }
+  .mailbox-floating-pager {
+    right: 0.75rem;
+    bottom: 1rem;
+    top: auto;
+    transform: none;
+    flex-direction: row;
+    padding: 0.4rem;
+  }
+  .mailbox-page-arrow { width: 38px; height: 38px; font-size: 1.55rem; }
 
   /* 域名指南双列 → 单列 */
   .domain-guide-grid { grid-template-columns: 1fr !important; }

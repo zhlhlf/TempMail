@@ -48,6 +48,7 @@ const state = {
   // 缓存
   mailboxes: [],
   emails:    [],
+  mailboxPager: { page: 1, size: 20, total: 0 },
 };
 
 // ─── 工具函数 ───────────────────────────────────────────────
@@ -163,9 +164,9 @@ const api = {
   submitDomain:    body => apiFetch(API_BASE + '/domains/submit', { method: 'POST', body: JSON.stringify(body) }),
   // 轮询域名状态（任意已登录用户，不需要管理员权限）
   getDomainStatus: id => apiFetch(API_BASE + '/domains/' + id + '/status'),
-  // 邮箱 → 解包 {data:[...]}
+  // 邮箱 → 保留分页元数据
   createMailbox:   (body) => apiFetch(API_BASE + '/mailboxes', { method: 'POST', body: JSON.stringify(body || {}) }).then(d => d.mailbox || d),
-  listMailboxes:   () => apiFetch(API_BASE + '/mailboxes').then(d => Array.isArray(d) ? d : (d.data || [])),
+  listMailboxes:   (page=1,size=20) => apiFetch(API_BASE + '/mailboxes?page=' + page + '&size=' + size),
   deleteMailbox: id  => apiFetch(API_BASE + '/mailboxes/' + id, { method: 'DELETE' }),
   renewMailbox: (id, body) => apiFetch(API_BASE + '/mailboxes/' + id + '/renew', { method: 'PUT', body: JSON.stringify(body || {}) }).then(d => d.mailbox || d),
   // 邮件 → 解包 {data:[...]}
@@ -521,11 +522,18 @@ async function renderPage(page) {
 // ─── Dashboard ─────────────────────────────────────────────
 async function renderDashboard(container) {
   const isAdmin = state.account?.is_admin;
-  const [mailboxes, domains, statsData] = await Promise.all([
-    api.listMailboxes(),
+  const pager = state.mailboxPager || { page: 1, size: 20, total: 0 };
+  const [mailboxResp, domains, statsData] = await Promise.all([
+    api.listMailboxes(pager.page, pager.size),
     api.domains(),
     api.stats().catch(() => null),
   ]);
+  const mailboxes = Array.isArray(mailboxResp) ? mailboxResp : (mailboxResp.data || []);
+  state.mailboxPager = {
+    page: Number(mailboxResp.page || pager.page || 1),
+    size: Number(mailboxResp.size || pager.size || 20),
+    total: Number(mailboxResp.total || 0),
+  };
   state.mailboxes = mailboxes || [];
 
   const actions = $('topbar-actions');
@@ -537,6 +545,9 @@ async function renderDashboard(container) {
   }
 
   const boxes  = state.mailboxes;
+  const totalPages = Math.max(1, Math.ceil((state.mailboxPager.total || 0) / state.mailboxPager.size));
+  const hasPrevPage = state.mailboxPager.page > 1;
+  const hasNextPage = state.mailboxPager.page < totalPages;
   const st     = statsData || {};
   const activeDomains  = (domains||[]).filter(d => d.is_active).length;
   const pendingDomains = (domains||[]).filter(d => d.status === 'pending').length;
@@ -584,8 +595,22 @@ async function renderDashboard(container) {
         ${boxes.map(mb => buildMailboxCard(mb)).join('')}
       </div>
     `}
+    <div class="mailbox-floating-pager" aria-label="邮箱分页">
+      <button class="mailbox-page-arrow" onclick="changeMailboxPage(-1)" ${hasPrevPage ? '' : 'disabled'} title="上一页">‹</button>
+      <div class="mailbox-page-info">${state.mailboxPager.page}/${totalPages}</div>
+      <button class="mailbox-page-arrow" onclick="changeMailboxPage(1)" ${hasNextPage ? '' : 'disabled'} title="下一页">›</button>
+    </div>
   `;
 }
+
+window.changeMailboxPage = function(delta) {
+  const pager = state.mailboxPager || { page: 1, size: 20, total: 0 };
+  const totalPages = Math.max(1, Math.ceil((pager.total || 0) / pager.size));
+  const nextPage = Math.min(totalPages, Math.max(1, pager.page + delta));
+  if (nextPage === pager.page) return;
+  state.mailboxPager = { ...pager, page: nextPage };
+  renderPage('dashboard');
+};
 
 function buildMailboxCard(mb) {
   const expiresAt = mb.expires_at ? new Date(mb.expires_at) : null;
@@ -1929,7 +1954,7 @@ async function renderAdminSettings(container) {
         <div class="divider"></div>
 
         <!-- 每用户邮箱上限 -->
-        ${inputRow('input-max-mailboxes-per-user', '每账户邮箱上限', maxMb, '每个账户同时存在的邮箱数量上限', '5')}
+        ${inputRow('input-max-mailboxes-per-user', '普通账户邮箱上限', maxMb, '每个账户同时存在的邮箱数量上限', '5')}
         <div class="divider"></div>
 
         <!-- 服务信息 -->

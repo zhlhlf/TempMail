@@ -471,6 +471,15 @@ func (s *Store) CreateMailbox(ctx context.Context, accountID uuid.UUID, address 
 	}, nil
 }
 
+func (s *Store) CountMailboxes(ctx context.Context, accountID uuid.UUID) (int, error) {
+	var total int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM mailboxes WHERE account_id = ?`, accountID.String()).Scan(&total); err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
 func (s *Store) ListMailboxes(ctx context.Context, accountID uuid.UUID, page, size int) ([]model.Mailbox, int, error) {
 	var total int
 	if err := s.db.QueryRowContext(ctx,
@@ -563,7 +572,7 @@ func (s *Store) GetMailboxByFullAddress(ctx context.Context, fullAddress string)
 	var id, acctID, createdAt, expiresAt string
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, account_id, address, domain_id, full_address, created_at, expires_at
-		 FROM mailboxes WHERE full_address = ?`,
+		 FROM mailboxes WHERE full_address = ? AND expires_at > datetime('now')`,
 		strings.ToLower(fullAddress),
 	).Scan(&id, &acctID, &m.Address, &m.DomainID, &m.FullAddress, &createdAt, &expiresAt)
 	if err != nil {

@@ -49,6 +49,22 @@ func (h *MailboxHandler) Create(c *gin.Context) {
 		}
 	}
 
+	if account != nil && !account.IsAdmin {
+		if limitStr, err := h.store.GetSetting(c.Request.Context(), "max_mailboxes_per_user"); err == nil {
+			if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+				total, err := h.store.CountMailboxes(c.Request.Context(), account.ID)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+				if total >= limit {
+					c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("mailbox limit reached: maximum %d mailboxes", limit)})
+					return
+				}
+			}
+		}
+	}
+
 	// 确定域名：指定 or 随机
 	var domainRecord *model.Domain
 	if d := strings.TrimSpace(strings.ToLower(req.Domain)); d != "" {
