@@ -716,13 +716,16 @@ tr:hover td { background: rgba(184,92,56,0.04); }
 .email-subject-big { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.7rem; }
 .email-info-row { display: flex; gap: 0.4rem; font-size: 0.82rem; color: var(--text-secondary); flex-wrap: wrap; align-items: center; }
 .email-info-row strong { color: var(--text); }
+.email-detail-card {
+  overflow: visible;
+}
 .email-body-frame {
   width: 100%;
   border: none;
   min-height: 400px;
   background: white;
   display: block;
-  border-radius: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
 }
 .email-body-text {
   padding: 1.3rem;

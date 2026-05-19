@@ -121,6 +121,19 @@ async function copyText(text) {
   }
 }
 
+function inferMxBaseDomain(fullDomain) {
+  const parts = String(fullDomain || '').trim().toLowerCase().replace(/^\.+|\.+$/g, '').split('.').filter(Boolean);
+  if (parts.length < 2) return '';
+  return parts.length >= 3 ? parts.slice(1).join('.') : parts.join('.');
+}
+
+const inferBaseDomain = inferMxBaseDomain;
+
+function buildDefaultMxHostname(fullDomain) {
+  const baseDomain = inferMxBaseDomain(fullDomain);
+  return baseDomain ? `mail.${baseDomain}` : '';
+}
+
 // ─── API 客户端 ─────────────────────────────────────────────
 async function apiFetch(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
@@ -861,6 +874,58 @@ window.deleteEmail = async function(mbId, eid) {
   } catch(e) { toast('删除失败: ' + e.message, 'error'); }
 };
 
+function writeEmailFrame(frame, htmlBody) {
+  const viewerCss = `
+    <style id="tempmail-email-viewer-style">
+      html, body {
+        margin: 0 !important;
+        background: #fff !important;
+        min-width: 0 !important;
+      }
+      body { overflow-x: auto !important; }
+      img { max-width: 100%; height: auto; }
+    </style>`;
+  let docHtml = String(htmlBody || '');
+  if (/<head\b[^>]*>/i.test(docHtml)) {
+    docHtml = docHtml.replace(/<head\b([^>]*)>/i, `<head$1>${viewerCss}`);
+  } else if (/<html\b[^>]*>/i.test(docHtml)) {
+    docHtml = docHtml.replace(/<html\b([^>]*)>/i, `<html$1><head>${viewerCss}</head>`);
+  } else {
+    docHtml = `<!doctype html><html><head>${viewerCss}</head><body>${docHtml}</body></html>`;
+  }
+
+  const doc = frame.contentDocument;
+  doc.open();
+  doc.write(docHtml);
+  doc.close();
+
+  const setHeight = () => {
+    try {
+      const body = frame.contentDocument.body;
+      const html = frame.contentDocument.documentElement;
+      const height = Math.max(
+        body?.scrollHeight || 0,
+        body?.offsetHeight || 0,
+        html?.scrollHeight || 0,
+        html?.offsetHeight || 0,
+        400
+      );
+      frame.style.height = `${height + 24}px`;
+    } catch (_) {}
+  };
+
+  frame.addEventListener('load', setHeight);
+  setTimeout(() => {
+    setHeight();
+    frame.contentDocument?.querySelectorAll('img').forEach(img => {
+      img.addEventListener('load', setHeight, { once: true });
+      img.addEventListener('error', setHeight, { once: true });
+    });
+    frame.contentDocument?.fonts?.ready?.then(setHeight).catch(() => {});
+  }, 50);
+  [300, 1000, 2000].forEach(delay => setTimeout(setHeight, delay));
+}
+
 // ─── Email View ────────────────────────────────────────────
 async function renderEmailView(container) {
   const mb = state.currentMailbox;
@@ -885,7 +950,7 @@ async function renderEmailView(container) {
 
   // 先渲染完整 HTML（含 iframe 占位），再向 iframe 写入内容
   container.innerHTML = `
-    <div class="card" style="padding:0;max-width:860px">
+    <div class="card email-detail-card" style="padding:0;max-width:860px">
       <div class="email-detail-header">
         <div class="email-subject-big">${escHtml(e.subject || '(无主题)')}</div>
         <div class="email-info-row">
@@ -907,14 +972,7 @@ async function renderEmailView(container) {
   if (htmlBody) {
     const frame = container.querySelector('#email-frame');
     if (frame) {
-      frame.contentDocument.open();
-      frame.contentDocument.write(htmlBody);
-      frame.contentDocument.close();
-      const setH = () => {
-        try { frame.style.height = frame.contentDocument.body.scrollHeight + 20 + 'px'; } catch (_) {}
-      };
-      frame.addEventListener('load', setH);
-      setTimeout(setH, 300);
+      writeEmailFrame(frame, htmlBody);
     }
   }
 }
@@ -1345,7 +1403,7 @@ async function renderAdminRetainedMailView(container) {
   const sub = $('topbar-subtitle'); if (sub) sub.textContent = `收件人：${recipient}`;
 
   container.innerHTML = `
-    <div class="card" style="padding:0;max-width:900px">
+    <div class="card email-detail-card" style="padding:0;max-width:900px">
       <div class="email-detail-header">
         <div class="email-subject-big">${escHtml(m.subject || '(无主题)')}</div>
         <div class="email-info-row">
@@ -1368,14 +1426,7 @@ async function renderAdminRetainedMailView(container) {
   if (htmlBody) {
     const frame = container.querySelector('#retained-email-frame');
     if (frame) {
-      frame.contentDocument.open();
-      frame.contentDocument.write(htmlBody);
-      frame.contentDocument.close();
-      const setHeight = () => {
-        try { frame.style.height = frame.contentDocument.body.scrollHeight + 20 + 'px'; } catch (_) {}
-      };
-      frame.addEventListener('load', setHeight);
-      setTimeout(setHeight, 300);
+      writeEmailFrame(frame, htmlBody);
     }
   }
 }
@@ -1581,20 +1632,27 @@ window.showAddDomainModal = function() {
 
   const inp = overlay.querySelector('#add-domain-inp');
   const hostnameInp = overlay.querySelector('#add-hostname-inp');
+  let hostnameTouched = false;
   inp?.addEventListener('keydown', e => { if (e.key === 'Enter') window.doAddDomainCheck(false); });
-  inp?.addEventListener('input', updateDnsHint);
-  hostnameInp?.addEventListener('input', updateDnsHint);
+  inp?.addEventListener('input', () => {
+    if (!hostnameTouched && hostnameInp) hostnameInp.value = buildDefaultMxHostname(inp.value);
+    updateDnsHint();
+  });
+  hostnameInp?.addEventListener('input', () => {
+    hostnameTouched = true;
+    updateDnsHint();
+  });
 
   function updateDnsHint() {
     const d = (inp?.value || '').trim() || 'example.com';
     const ip = serverIP || '&lt;服务器IP&gt;';
-    const hn = hostnameInp?.value.trim() || 'mail.' + d;
+    const hn = hostnameInp?.value.trim() || buildDefaultMxHostname(d) || 'mail.' + d;
     const hasHostname = !!hostnameInp?.value.trim();
     const tbody = document.getElementById('add-dns-rows');
     if (!tbody) return;
     tbody.innerHTML = `
       <tr><td style="padding:2px 5px">MX</td><td style="padding:2px 5px;font-family:monospace">@</td><td style="padding:2px 5px;font-family:monospace">${escHtml(hn)}</td><td style="padding:2px 5px">10</td></tr>
-      ${hasHostname ? '' : `<tr><td style="padding:2px 5px">A</td><td style="padding:2px 5px;font-family:monospace">mail.${escHtml(d)}</td><td style="padding:2px 5px;font-family:monospace">${escHtml(ip)}</td><td style="padding:2px 5px">—</td></tr>`}
+      ${hasHostname ? '' : `<tr><td style="padding:2px 5px">A</td><td style="padding:2px 5px;font-family:monospace">${escHtml(buildDefaultMxHostname(d) || 'mail.' + d)}</td><td style="padding:2px 5px;font-family:monospace">${escHtml(ip)}</td><td style="padding:2px 5px">—</td></tr>`}
       <tr><td style="padding:2px 5px">TXT</td><td style="padding:2px 5px;font-family:monospace">@</td><td style="padding:2px 5px;font-family:monospace">v=spf1 ip4:${escHtml(ip)} ~all</td><td style="padding:2px 5px">—</td></tr>
     `;
   }
@@ -2025,13 +2083,21 @@ window.showMXRegisterModal = function() {
 
   // 实时更新 DNS 提示
   const inp = overlay.querySelector('#mxr-domain');
+  const hostnameInp = overlay.querySelector('#mxr-hostname');
+  let hostnameTouched = false;
   inp?.addEventListener('keydown', e => { if (e.key === 'Enter') submitMXRegister(); });
+  inp?.addEventListener('input', () => {
+    if (!hostnameTouched && hostnameInp) hostnameInp.value = buildDefaultMxHostname(inp.value);
+  });
+  hostnameInp?.addEventListener('input', () => {
+    hostnameTouched = true;
+  });
 
   overlay.querySelector('#mxr-submit').addEventListener('click', submitMXRegister);
 
   async function submitMXRegister() {
     const domain = (inp?.value || '').trim().toLowerCase();
-    const hostname = (overlay.querySelector('#mxr-hostname')?.value || '').trim();
+    const hostname = (hostnameInp?.value || '').trim();
     if (!domain) { toast('请输入域名', 'warn'); return; }
     const btn    = overlay.querySelector('#mxr-submit');
     const status = overlay.querySelector('#mxr-status');
@@ -2185,12 +2251,6 @@ window.showCFCreateModal = function() {
   const submitBtn  = overlay.querySelector('#cfc-submit');
   let hostnameTouched = false;
   let zoneTouched = false;
-
-  function inferBaseDomain(fullDomain) {
-    const parts = fullDomain.trim().toLowerCase().replace(/\.$/, '').split('.').filter(Boolean);
-    if (parts.length < 3) return '';
-    return parts.slice(1).join('.');
-  }
 
   function autoFillFromDomain() {
     const baseDomain = inferBaseDomain(domainInp.value);
