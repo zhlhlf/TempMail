@@ -300,25 +300,3 @@ func runMXVerifier(ctx context.Context, db *store.Store, domainH *handler.Domain
 		}
 	}
 }
-
-func writeAdminKeyFile(ctx context.Context, db *store.Store, keyFile string) {
-	select {
-	case <-ctx.Done():
-		return
-	case <-time.After(1 * time.Second):
-	}
-	adminKey, err := db.GetAdminAPIKey(context.Background())
-	if err != nil {
-		log.Printf("[adminkey] could not fetch admin key: %v", err)
-		return
-	}
-	if err := os.MkdirAll(filepath.Dir(keyFile), 0700); err != nil {
-		return
-	}
-	content := "# TempMail Admin API Key\n# Auto-generated on startup — keep this secret!\n\nADMIN_API_KEY=" + adminKey + "\n"
-	if err := os.WriteFile(keyFile, []byte(content), 0600); err != nil {
-		log.Printf("[adminkey] write file error: %v", err)
-		return
-	}
-	log.Printf("✓ Admin API Key written to %s", keyFile)
-}

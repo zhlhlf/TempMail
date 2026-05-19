@@ -3,6 +3,7 @@ name: Release
 on:
   workflow_dispatch:
 
+
 permissions:
   contents: write
 
@@ -11,34 +12,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
 
-      - name: Set release metadata
-        run: |
-          echo "COMMIT_HASH=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-          echo "BINARY_NAME=tempmail-linux-amd64" >> "$GITHUB_ENV"
-          echo "ARCHIVE_NAME=tempmail-linux-amd64.tar.gz" >> "$GITHUB_ENV"
+    - name: Set release metadata
+      run: |
+        echo "COMMIT_HASH=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+        echo "BINARY_NAME=tempmail-linux-amd64" >> "$GITHUB_ENV"
 
-      - name: Build archive
-        env:
-          CGO_ENABLED: 0
-          GOOS: linux
-          GOARCH: amd64
-        run: |
-          go build -trimpath -ldflags="-s -w" -o "$BINARY_NAME" .
-          tar -czf "$ARCHIVE_NAME" "$BINARY_NAME" .env.example
+    - name: Build binary
+      env:
+        CGO_ENABLED: 0
+        GOOS: linux
+        GOARCH: amd64
+      run: |
+        go build -trimpath -ldflags="-s -w" -o "$BINARY_NAME" .
 
-      - name: Create release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "$COMMIT_HASH" \
-            "$ARCHIVE_NAME" \
-            --title "$COMMIT_HASH" \
-            --notes "Release for commit $GITHUB_SHA"
+    - name: Create release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release create "$COMMIT_HASH" \
+          "$BINARY_NAME" \
+          --title "$COMMIT_HASH" \
+          --notes "Release for commit $GITHUB_SHA"
