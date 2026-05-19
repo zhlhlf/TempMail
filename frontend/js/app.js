@@ -2183,6 +2183,21 @@ window.showCFCreateModal = function() {
   const hostnameInp = overlay.querySelector('#cfc-hostname');
   const zoneInp = overlay.querySelector('#cfc-zone');
   const submitBtn  = overlay.querySelector('#cfc-submit');
+  let hostnameTouched = false;
+  let zoneTouched = false;
+
+  function inferBaseDomain(fullDomain) {
+    const parts = fullDomain.trim().toLowerCase().replace(/\.$/, '').split('.').filter(Boolean);
+    if (parts.length < 3) return '';
+    return parts.slice(1).join('.');
+  }
+
+  function autoFillFromDomain() {
+    const baseDomain = inferBaseDomain(domainInp.value);
+    if (!baseDomain) return;
+    if (!hostnameTouched) hostnameInp.value = `mail.${baseDomain}`;
+    if (!zoneTouched) zoneInp.value = baseDomain;
+  }
 
   // 输入时实时更新按钮状态
   function updateSubmitBtn() {
@@ -2192,9 +2207,18 @@ window.showCFCreateModal = function() {
   }
 
   // 输入时实时更新；回车直接提交
-  domainInp.addEventListener('input', updateSubmitBtn);
-  hostnameInp.addEventListener('input', updateSubmitBtn);
-  zoneInp.addEventListener('input', updateSubmitBtn);
+  domainInp.addEventListener('input', () => {
+    autoFillFromDomain();
+    updateSubmitBtn();
+  });
+  hostnameInp.addEventListener('input', () => {
+    hostnameTouched = true;
+    updateSubmitBtn();
+  });
+  zoneInp.addEventListener('input', () => {
+    zoneTouched = true;
+    updateSubmitBtn();
+  });
   domainInp.addEventListener('keydown', e => { if (e.key === 'Enter') hostnameInp.focus(); });
   hostnameInp.addEventListener('keydown', e => { if (e.key === 'Enter') zoneInp.focus(); });
   zoneInp.addEventListener('keydown', e => { if (e.key === 'Enter' && !submitBtn.disabled) submitBtn.click(); });

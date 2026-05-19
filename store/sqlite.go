@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at DATETIME NOT NULL DEFAULT (datetime('now'))
 );
 
-INSERT OR IGNORE INTO app_settings (key, value) VALUES ('registration_open', 'true');
+INSERT OR IGNORE INTO app_settings (key, value) VALUES ('registration_open', 'false');
 INSERT OR IGNORE INTO app_settings (key, value) VALUES ('smtp_server_ip', '');
 INSERT OR IGNORE INTO app_settings (key, value) VALUES ('smtp_hostname', '');
 INSERT OR IGNORE INTO app_settings (key, value) VALUES ('mailbox_ttl_minutes', '30');
