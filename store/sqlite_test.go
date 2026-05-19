@@ -265,3 +265,49 @@ func TestGetMailboxByFullAddressIgnoresExpired(t *testing.T) {
 		t.Fatalf("GetMailboxByFullAddress expired error = %v, want sql.ErrNoRows", err)
 	}
 }
+
+func TestDeleteExpiredMailboxesDeletesRFC3339Expiry(t *testing.T) {
+	s, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	domain, err := s.AddDomain(ctx, "cleanup.example.com", "mail.cleanup.example.com")
+	if err != nil {
+		t.Fatalf("AddDomain: %v", err)
+	}
+	accounts, _, err := s.ListAccounts(ctx, 1, 10)
+	if err != nil {
+		t.Fatalf("ListAccounts: %v", err)
+	}
+	if len(accounts) == 0 {
+		t.Fatal("no account found")
+	}
+	accountID := accounts[0].ID
+
+	activeMailbox, err := s.CreateMailbox(ctx, accountID, "cleanup-active", domain.ID, "cleanup-active@cleanup.example.com", 30)
+	if err != nil {
+		t.Fatalf("CreateMailbox active: %v", err)
+	}
+	expiredMailbox, err := s.CreateMailbox(ctx, accountID, "cleanup-expired", domain.ID, "cleanup-expired@cleanup.example.com", 30)
+	if err != nil {
+		t.Fatalf("CreateMailbox expired: %v", err)
+	}
+	_, err = s.db.ExecContext(ctx, `UPDATE mailboxes SET expires_at = ? WHERE id = ?`, time.Now().UTC().Add(-time.Minute).Format(time.RFC3339), expiredMailbox.ID.String())
+	if err != nil {
+		t.Fatalf("expire mailbox: %v", err)
+	}
+
+	deleted, err := s.DeleteExpiredMailboxes(ctx)
+	if err != nil {
+		t.Fatalf("DeleteExpiredMailboxes: %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("deleted = %d, want 1", deleted)
+	}
+	if _, err := s.GetMailbox(ctx, expiredMailbox.ID, accountID); err != sql.ErrNoRows {
+		t.Fatalf("expired mailbox still exists error = %v, want sql.ErrNoRows", err)
+	}
+	if _, err := s.GetMailbox(ctx, activeMailbox.ID, accountID); err != nil {
+		t.Fatalf("active mailbox should remain: %v", err)
+	}
+}

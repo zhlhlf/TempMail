@@ -427,15 +427,16 @@ func (s *Store) UpdateDomainHostname(ctx context.Context, domainID int, hostname
 
 func (s *Store) GetStats(ctx context.Context) (*model.Stats, error) {
 	var st model.Stats
+	now := time.Now().UTC().Format(time.RFC3339)
 	err := s.db.QueryRowContext(ctx, `
 		SELECT
 		  (SELECT COUNT(*) FROM mailboxes),
-		  (SELECT COUNT(*) FROM mailboxes WHERE expires_at > datetime('now')),
+		  (SELECT COUNT(*) FROM mailboxes WHERE expires_at > ?),
 		  (SELECT COUNT(*) FROM emails),
 		  (SELECT COUNT(*) FROM domains WHERE is_active = 1),
 		  (SELECT COUNT(*) FROM domains WHERE status = 'pending'),
 		  (SELECT COUNT(*) FROM accounts WHERE is_active = 1)
-	`).Scan(
+	`, now).Scan(
 		&st.TotalMailboxes, &st.ActiveMailboxes,
 		&st.TotalEmails, &st.ActiveDomains,
 		&st.PendingDomains, &st.TotalAccounts,
@@ -473,8 +474,9 @@ func (s *Store) CreateMailbox(ctx context.Context, accountID uuid.UUID, address 
 
 func (s *Store) CountMailboxes(ctx context.Context, accountID uuid.UUID) (int, error) {
 	var total int
+	now := time.Now().UTC().Format(time.RFC3339)
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM mailboxes WHERE account_id = ?`, accountID.String()).Scan(&total); err != nil {
+		`SELECT COUNT(*) FROM mailboxes WHERE account_id = ? AND expires_at > ?`, accountID.String(), now).Scan(&total); err != nil {
 		return 0, err
 	}
 	return total, nil
@@ -482,16 +484,17 @@ func (s *Store) CountMailboxes(ctx context.Context, accountID uuid.UUID) (int, e
 
 func (s *Store) ListMailboxes(ctx context.Context, accountID uuid.UUID, page, size int) ([]model.Mailbox, int, error) {
 	var total int
+	now := time.Now().UTC().Format(time.RFC3339)
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM mailboxes WHERE account_id = ?`, accountID.String()).Scan(&total); err != nil {
+		`SELECT COUNT(*) FROM mailboxes WHERE account_id = ? AND expires_at > ?`, accountID.String(), now).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, account_id, address, domain_id, full_address, created_at, expires_at
-		 FROM mailboxes WHERE account_id = ?
+		 FROM mailboxes WHERE account_id = ? AND expires_at > ?
 		 ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-		accountID.String(), size, (page-1)*size,
+		accountID.String(), now, size, (page-1)*size,
 	)
 	if err != nil {
 		return nil, 0, err
@@ -570,10 +573,11 @@ func (s *Store) RenewMailbox(ctx context.Context, mailboxID uuid.UUID, accountID
 func (s *Store) GetMailboxByFullAddress(ctx context.Context, fullAddress string) (*model.Mailbox, error) {
 	var m model.Mailbox
 	var id, acctID, createdAt, expiresAt string
+	now := time.Now().UTC().Format(time.RFC3339)
 	err := s.db.QueryRowContext(ctx,
 		`SELECT id, account_id, address, domain_id, full_address, created_at, expires_at
-		 FROM mailboxes WHERE full_address = ? AND expires_at > datetime('now')`,
-		strings.ToLower(fullAddress),
+		 FROM mailboxes WHERE full_address = ? AND expires_at > ?`,
+		strings.ToLower(fullAddress), now,
 	).Scan(&id, &acctID, &m.Address, &m.DomainID, &m.FullAddress, &createdAt, &expiresAt)
 	if err != nil {
 		return nil, err
@@ -586,7 +590,8 @@ func (s *Store) GetMailboxByFullAddress(ctx context.Context, fullAddress string)
 }
 
 func (s *Store) DeleteExpiredMailboxes(ctx context.Context) (int64, error) {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM mailboxes WHERE expires_at < datetime('now')`)
+	now := time.Now().UTC().Format(time.RFC3339)
+	result, err := s.db.ExecContext(ctx, `DELETE FROM mailboxes WHERE expires_at <= ?`, now)
 	if err != nil {
 		return 0, err
 	}
