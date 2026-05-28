@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"database/sql"
 	"fmt"
 	"io"
 	"log"
@@ -29,7 +30,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	db, err := store.New(ctx, cfg.DBDSN, promptInitialAdminKey())
+	db, err := store.New(ctx, cfg.DBDSN, promptInitialAdminKey(cfg.DBDSN))
 	if err != nil {
 		log.Fatalf("failed to connect database: %v", err)
 	}
@@ -97,9 +98,12 @@ func main() {
 	log.Println("Server exited")
 }
 
-func promptInitialAdminKey() string {
+func promptInitialAdminKey(dbPath string) string {
 	if envKey := strings.TrimSpace(os.Getenv("ADMIN_API_KEY")); envKey != "" {
 		return envKey
+	}
+	if hasAdminAccount(dbPath) {
+		return ""
 	}
 	if !isTerminalInput() {
 		return ""
@@ -112,6 +116,20 @@ func promptInitialAdminKey() string {
 		return ""
 	}
 	return strings.TrimSpace(value)
+}
+
+func hasAdminAccount(dbPath string) bool {
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return false
+	}
+	defer db.Close()
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM accounts WHERE is_admin = 1`).Scan(&count); err != nil {
+		return false
+	}
+	return count > 0
 }
 
 func isTerminalInput() bool {
@@ -175,7 +193,7 @@ func printInitialAdminKey(db *store.Store) {
 	}
 	log.Println("============================================================")
 	log.Println("首次初始化管理员账号，请保存以下 Admin API Key，后续启动不会重复生成：")
-	log.Printf("ADMIN_API_KEY=%s", db.InitialAdminKey())
+	log.Printf("ADMIN_API_KEY: %s", db.InitialAdminKey())
 	log.Println("============================================================")
 }
 
