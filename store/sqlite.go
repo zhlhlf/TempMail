@@ -105,7 +105,7 @@ var migrateSQL = `
 ALTER TABLE domains ADD COLUMN hostname TEXT NOT NULL DEFAULT '';
 `
 
-func New(ctx context.Context, dbPath string, initialAdminKey ...string) (*Store, error) {
+func New(ctx context.Context, dbPath string, customInitialAdminKey ...string) (*Store, error) {
 	if dbPath == "" {
 		dbPath = "/data/tempmail.db"
 	}
@@ -153,7 +153,7 @@ func New(ctx context.Context, dbPath string, initialAdminKey ...string) (*Store,
 	adminCreated := false
 	initialAdminKey := ""
 	if count == 0 {
-		adminKey := strings.TrimSpace(firstString(initialAdminKey...))
+		adminKey := strings.TrimSpace(firstString(customInitialAdminKey...))
 		if adminKey == "" {
 			adminKey = "tm_admin_" + generateAPIKey()
 		}
