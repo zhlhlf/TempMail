@@ -69,31 +69,6 @@ func main() {
 		httpErrCh <- httpServer.ListenAndServe()
 	}()
 	go func() {
-
-func promptInitialAdminKey() string {
-	if envKey := strings.TrimSpace(os.Getenv("ADMIN_API_KEY")); envKey != "" {
-		return envKey
-	}
-	if !isTerminalInput() {
-		return ""
-	}
-
-	fmt.Print("首次运行可自定义 ADMIN_API_KEY，直接回车将自动生成：")
-	reader := bufio.NewReader(os.Stdin)
-	value, err := reader.ReadString('\n')
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(value)
-}
-
-func isTerminalInput() bool {
-	info, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return (info.Mode() & os.ModeCharDevice) != 0
-}
 		log.Printf("✓ SMTP server listening on %s", cfg.SMTPAddr)
 		smtpErrCh <- smtpServer.ListenAndServe()
 	}()
@@ -120,6 +95,31 @@ func isTerminalInput() bool {
 		log.Printf("smtp shutdown error: %v", err)
 	}
 	log.Println("Server exited")
+}
+
+func promptInitialAdminKey() string {
+	if envKey := strings.TrimSpace(os.Getenv("ADMIN_API_KEY")); envKey != "" {
+		return envKey
+	}
+	if !isTerminalInput() {
+		return ""
+	}
+
+	fmt.Print("首次运行可自定义 ADMIN_API_KEY，直接回车将自动生成：")
+	reader := bufio.NewReader(os.Stdin)
+	value, err := reader.ReadString('\n')
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
+func isTerminalInput() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
 }
 
 func seedSettings(ctx context.Context, db *store.Store, cfg *config.Config) {
