@@ -57,6 +57,9 @@ func (d *DeliveryService) ValidateRecipient(ctx context.Context, recipient strin
 	}
 	if _, err := d.store.GetDomainByName(ctx, domain); err != nil {
 		if err == sql.ErrNoRows {
+			if d.shouldRetainUnknownMailbox(ctx) {
+				return normalized, nil
+			}
 			return "", ErrInactiveDomain
 		}
 		return "", err
