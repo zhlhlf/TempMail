@@ -105,7 +105,7 @@ var migrateSQL = `
 ALTER TABLE domains ADD COLUMN hostname TEXT NOT NULL DEFAULT '';
 `
 
-func New(ctx context.Context, dbPath string) (*Store, error) {
+func New(ctx context.Context, dbPath string, initialAdminKey ...string) (*Store, error) {
 	if dbPath == "" {
 		dbPath = "/data/tempmail.db"
 	}
@@ -153,7 +153,10 @@ func New(ctx context.Context, dbPath string) (*Store, error) {
 	adminCreated := false
 	initialAdminKey := ""
 	if count == 0 {
-		adminKey := "tm_admin_" + generateAPIKey()
+		adminKey := strings.TrimSpace(firstString(initialAdminKey...))
+		if adminKey == "" {
+			adminKey = "tm_admin_" + generateAPIKey()
+		}
 		adminID := uuid.New().String()
 		if _, err := db.ExecContext(ctx,
 			`INSERT INTO accounts (id, username, api_key, is_admin) VALUES (?, ?, ?, 1)`,
@@ -168,6 +171,13 @@ func New(ctx context.Context, dbPath string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 
 	return &Store{db: db, adminCreated: adminCreated, initialAdminKey: initialAdminKey}, nil
+}
+
+func firstString(values ...string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
 }
 
 func (s *Store) Close() {

@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -26,7 +29,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	db, err := store.New(ctx, cfg.DBDSN)
+	db, err := store.New(ctx, cfg.DBDSN, promptInitialAdminKey())
 	if err != nil {
 		log.Fatalf("failed to connect database: %v", err)
 	}
@@ -66,6 +69,31 @@ func main() {
 		httpErrCh <- httpServer.ListenAndServe()
 	}()
 	go func() {
+
+func promptInitialAdminKey() string {
+	if envKey := strings.TrimSpace(os.Getenv("ADMIN_API_KEY")); envKey != "" {
+		return envKey
+	}
+	if !isTerminalInput() {
+		return ""
+	}
+
+	fmt.Print("首次运行可自定义 ADMIN_API_KEY，直接回车将自动生成：")
+	reader := bufio.NewReader(os.Stdin)
+	value, err := reader.ReadString('\n')
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
+func isTerminalInput() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
+}
 		log.Printf("✓ SMTP server listening on %s", cfg.SMTPAddr)
 		smtpErrCh <- smtpServer.ListenAndServe()
 	}()
