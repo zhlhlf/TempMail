@@ -1882,6 +1882,7 @@ async function renderAdminSettings(container) {
   const ttlMins    = settings.mailbox_ttl_minutes   || '30';
   const announce   = settings.announcement          || '';
   const maxMb      = settings.max_mailboxes_per_user|| '5';
+  const retainUnknown = settings.accept_unknown_mailbox_to_retained !== 'false' && settings.accept_unknown_mailbox_to_retained !== false;
 
   function inputRow(id, label, value, hint, placeholder = '', settingKey = '') {
     const key = settingKey || id.replace(/^input-/, '').replace(/-/g, '_');
@@ -1910,6 +1911,19 @@ async function renderAdminSettings(container) {
           <div>
             <div class="toggle-label">开放自行注册</div>
             <span class="toggle-desc">开启后未登录用户可在登录页自行注册账户</span>
+          </div>
+        </div>
+        <div class="divider"></div>
+
+        <!-- 未创建邮箱留存开关 -->
+        <div class="toggle-wrap" style="margin-bottom:0.5rem">
+          <label class="toggle">
+            <input type="checkbox" id="toggle-retain-unknown" ${retainUnknown ? 'checked' : ''} onchange="saveRetainUnknownMailboxSetting(this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+          <div>
+            <div class="toggle-label">接收未在列表邮箱到留存列表</div>
+            <span class="toggle-desc">开启后，域名有效但未创建的邮箱会进入管理员留存邮件；关闭后 SMTP 会拒收这类邮箱</span>
           </div>
         </div>
         <div class="divider"></div>
@@ -2003,6 +2017,17 @@ window.saveRegistrationSetting = async function(enabled) {
   } catch(e) {
     toast('保存失败: ' + e.message, 'error');
     const cb = $('toggle-reg');
+    if (cb) cb.checked = !enabled;
+  }
+};
+
+window.saveRetainUnknownMailboxSetting = async function(enabled) {
+  try {
+    await api.admin.saveSettings({ accept_unknown_mailbox_to_retained: enabled ? 'true' : 'false' });
+    toast(`未创建邮箱留存已${enabled ? '开启' : '关闭'}`, 'success');
+  } catch(e) {
+    toast('保存失败: ' + e.message, 'error');
+    const cb = $('toggle-retain-unknown');
     if (cb) cb.checked = !enabled;
   }
 };

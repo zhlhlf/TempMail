@@ -63,6 +63,7 @@ func (h *SettingHandler) AdminUpdate(c *gin.Context) {
 		"default_domain":         true,
 		"mailbox_ttl_minutes":    true,
 		"cf_api_token":           true,
+		"accept_unknown_mailbox_to_retained": true,
 	}
 
 	for k, v := range req {

@@ -75,6 +75,9 @@ func (d *DeliveryService) Deliver(ctx context.Context, input DeliveryInput) (*De
 		if err != sql.ErrNoRows {
 			return nil, err
 		}
+		if !d.shouldRetainUnknownMailbox(ctx) {
+			return nil, ErrUnknownMailbox
+		}
 		if _, retainErr := d.store.InsertRetainedMail(ctx, recipient, input.Sender, input.Subject, input.BodyText, input.BodyHTML, input.Raw); retainErr != nil {
 			return nil, retainErr
 		}
@@ -85,4 +88,12 @@ func (d *DeliveryService) Deliver(ctx context.Context, input DeliveryInput) (*De
 		return nil, err
 	}
 	return &DeliveryResult{Status: "delivered"}, nil
+}
+
+func (d *DeliveryService) shouldRetainUnknownMailbox(ctx context.Context) bool {
+	value, err := d.store.GetSetting(ctx, "accept_unknown_mailbox_to_retained")
+	if err != nil {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(value), "true")
 }

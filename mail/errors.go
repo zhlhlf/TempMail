@@ -5,4 +5,5 @@ import "errors"
 var (
 	ErrInvalidRecipient = errors.New("invalid recipient")
 	ErrInactiveDomain   = errors.New("inactive or unknown domain")
+	ErrUnknownMailbox   = errors.New("unknown mailbox")
 )

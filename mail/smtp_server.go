@@ -122,6 +122,10 @@ func (s *smtpSession) Data(r io.Reader) error {
 			Raw:       parsed.Raw,
 		})
 		if err != nil {
+			if err == ErrUnknownMailbox {
+				log.Printf("[smtp] delivery rejected recipient=<%s> from=<%s>: mailbox not found", recipient, parsed.Sender)
+				return &smtp.SMTPError{Code: 550, Message: "mailbox not found"}
+			}
 			log.Printf("[smtp] delivery failed recipient=<%s> from=<%s>: %v", recipient, parsed.Sender, err)
 			return &smtp.SMTPError{Code: 451, Message: fmt.Sprintf("delivery failed: %v", err)}
 		}
